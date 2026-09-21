@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: debezium/postgres:16
+    container_name: dwo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dual_write_outbox
+    ports:
+      - "5432:5432"
+    command: ["postgres", "-c", "wal_level=logical"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: dwo-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      CLUSTER_ID: "Q8C_L-f9QrW_0hxGEmdPKQ"
+
+  kafka-connect:
+    image: debezium/connect:2.7.3.Final
+    container_name: dwo-connect
+    restart: unless-stopped
+    depends_on:
+      - kafka 
+      - postgres
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: dwo-connect-group
+      CONFIG_STORAGE_TOPIC: dwo_connect_configs
+      OFFSET_STORAGE_TOPIC: dwo_connect_offsets
+      STATUS_STORAGE_TOPIC: dwo_connect_statuses
+
+volumes:
+  pgdata:
